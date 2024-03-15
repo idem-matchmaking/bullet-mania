@@ -16,18 +16,34 @@ import { NicknameScreen } from "./components/lobby/NicknameScreen";
 import { LobbySelector } from "./components/lobby/LobbySelector";
 import { BulletButton } from "./components/lobby/BulletButton";
 import { GameComponent, GameConfig } from "./components/GameComponent";
+import { PlayerJoin } from "./idem/components/PlayerJoin";
+import { ServerMessageType } from "../../common/messages";
+import { MatchRankingResponse } from "../../common/idem/contracts/MatchRankingResponse";
+import { GameResult } from "./idem/components/GameResult";
+import { Region } from "@hathora/cloud-sdk-typescript/dist/sdk/models/shared";
 
+const gameServer = process.env.IDEM_GAME_SERVER!;
 const appId = process.env.HATHORA_APP_ID;
 const hathoraSdk = getHathoraSdk(appId);
 
 function App() {
   const [googleIdToken, setGoogleIdToken] = useState<string | undefined>();
-  const token = useAuthToken(googleIdToken);
+  const [token, setToken] = React.useState<Token | undefined>(undefined);
+
   const [connection, setConnection] = useState<HathoraConnection | undefined>();
   const [sessionMetadata, setSessionMetadata] = useState<SessionMetadata | undefined>(undefined);
-  const [failedToConnect, setFailedToConnect] = useState(false);
+  const [connectionClosed, setConnectionClosed] = useState(false);
   const [roomIdNotFound, setRoomIdNotFound] = useState<string | undefined>(undefined);
-  const [isNicknameAcked, setIsNicknameAcked] = React.useState<boolean>(false);
+  const [isNicknameAcked, setIsNicknameAcked] = React.useState<boolean>(true);
+
+  useEffect(() => {
+    const initToken = async () => {
+      const tokenLocal = await getToken(googleIdToken);
+      setToken(tokenLocal);
+    };
+
+    initToken();
+  }, []);
 
   if (appId == null || token == null) {
     return (
@@ -38,59 +54,65 @@ function App() {
       </div>
     );
   }
+
   const roomIdFromUrl = getRoomIdFromUrl();
   if (
     roomIdFromUrl != null &&
     sessionMetadata?.roomId != roomIdFromUrl &&
     roomIdNotFound == null &&
-    !failedToConnect &&
+    !connectionClosed &&
     !sessionMetadata?.isGameEnd
   ) {
     // Once we parse roomId from the URL, get connection details to connect player to the server
     isReadyForConnect(appId, roomIdFromUrl, hathoraSdk)
-      .then(async ({ connectionInfo, lobbyInfo }) => {
+      .then(async ({ connectionInfo }) => {
         setRoomIdNotFound(undefined);
         if (connection != null) {
           connection.disconnect(1000);
         }
 
         try {
-          const roomConfig = JSON.parse(lobbyInfo.roomConfig) as RoomConfig;
+          const roomConfig: RoomConfig = {
+            expectedPlayerCount: 0,
+            expectedPlayers: [],
+            capacity: 2,
+            winningScore: 5,
+            playerNicknameMap: {},
+            isGameEnd: false
+          };
 
           if (!roomConfig.isGameEnd) {
             const connect = new HathoraConnection(roomIdFromUrl, connectionInfo);
-            connect.onClose(async () => {
-              // If game has ended, we want updated lobby state
-              const { lobbyV3: updatedLobbyInfo } = await hathoraSdk.lobbyV3.getLobbyInfoByRoomId(roomIdFromUrl);
-              if (updatedLobbyInfo == null) {
-                return;
+            connect.onMessageJson((message) => {
+
+              if (message.type === ServerMessageType.GameResult) {
+                console.log('GameResult');
+                const matchRankingResponse = JSON.parse(message.matchRankingResponse) as MatchRankingResponse;
+
+                setSessionMetadata({
+                  ...sessionMetadata!,
+                  matchRankingResponse: matchRankingResponse,
+                  winningPlayerId: message.winningPlayerId,
+                  isGameEnd: true
+                });
               }
-              const updatedRoomConfig = JSON.parse(updatedLobbyInfo.roomConfig) as RoomConfig;
-              setSessionMetadata({
-                serverUrl: `${connectionInfo.host}:${connectionInfo.port}`,
-                region: updatedLobbyInfo.region,
-                roomId: updatedLobbyInfo.roomId,
-                capacity: updatedRoomConfig.capacity,
-                winningScore: updatedRoomConfig.winningScore,
-                isGameEnd: !!updatedRoomConfig.isGameEnd,
-                winningPlayerId: updatedRoomConfig.winningPlayerId,
-                playerNicknameMap: updatedRoomConfig.playerNicknameMap,
-                creatorId: updatedLobbyInfo.createdBy,
-              });
-              setFailedToConnect(true);
+            });
+            connect.onClose(async (e) => {
+              console.log('HathoraConnection closed: ' + e.reason);
+              setConnectionClosed(true);
             });
             setConnection(connect);
           }
           setSessionMetadata({
             serverUrl: `${connectionInfo.host}:${connectionInfo.port}`,
-            region: lobbyInfo.region,
-            roomId: lobbyInfo.roomId,
+            region: gameServer as Region,
+            roomId: roomIdFromUrl,
             capacity: roomConfig.capacity,
             winningScore: roomConfig.winningScore,
             isGameEnd: roomConfig.isGameEnd,
             winningPlayerId: roomConfig.winningPlayerId,
             playerNicknameMap: roomConfig.playerNicknameMap,
-            creatorId: lobbyInfo.createdBy,
+            creatorId: 'admin',
           });
         } catch (e) {
           setRoomIdNotFound(roomIdFromUrl);
@@ -107,10 +129,10 @@ function App() {
         <div className="md:w-fit mx-auto px-2 md:px-0">
           <div className={"flex justify-center items-center"}>
             <div className={"flex justify-center items-center md:items-end"}>
-              <a href="https://hathora.dev" className={"w-[150px] md:w-[207px]"}>
-                <HathoraLogo />
+              <a href="/" className={""}>
+                <img src="title_logo.png" className="h-[40px] md:h-[60px]" alt="logo" />
               </a>
-              <div className={"mx-3 text-hathoraSecondary-400 text-xs md:text-lg text-baseline"}>PRESENTS</div>
+              <div className={"mx-3 text-hathoraSecondary-400 text-xs md:text-lg text-baseline"}>PRESENT</div>
             </div>
             <a href="/" className={""}>
               <img src="bullet_mania_logo_light.png" className="h-[40px] md:h-[60px]" alt="logo" />
@@ -121,28 +143,22 @@ function App() {
             <NavLink headingId={"docsTop"}>Skip to documentation</NavLink>
           </p>
           <div className={"md:mt-4 relative"} style={{ width: GameConfig.width, height: GameConfig.height }}>
-            {failedToConnect ? (
+            {/* <GameResult /> */}
+            {connectionClosed ? (
               <div className="border text-white flex flex-wrap flex-col justify-center h-full w-full content-center text-secondary-400 text-center">
-                Connection was closed
-                <br />
-                {sessionMetadata?.isGameEnd ? (
-                  <>
-                    <div className={"text-secondary-600"}>Game has ended</div>
-                    <div className={"text-secondary-600"}>
-                      {`${
-                        sessionMetadata.winningPlayerId
-                          ? sessionMetadata.playerNicknameMap[sessionMetadata.winningPlayerId]
-                          : sessionMetadata.winningPlayerId
-                      } won!`}
-                    </div>
-                  </>
+                {sessionMetadata?.isGameEnd && sessionMetadata.matchRankingResponse != null ? (
+                  <GameResult
+                    matchRankingResponse={sessionMetadata.matchRankingResponse}
+                    winningPlayerId={sessionMetadata.winningPlayerId!}
+                  />
                 ) : (
-                  <span className={"text-secondary-600"}>Game is full</span>
+                  <div>
+                    <span className={"text-secondary-600"}>Connection was closed</span>
+                    <a href={"/"} className={"mt-2"}>
+                      <BulletButton text={"Return to home"} xlarge />
+                    </a>
+                  </div>
                 )}
-                <br />
-                <a href={"/"} className={"mt-2"}>
-                  <BulletButton text={"Return to Lobby"} xlarge />
-                </a>
               </div>
             ) : (
               <>
@@ -167,12 +183,7 @@ function App() {
                   </div>
                 </div>
                 {connection == null && !sessionMetadata?.isGameEnd && !roomIdFromUrl ? (
-                  <LobbySelector
-                    appId={appId}
-                    playerToken={token}
-                    roomIdNotFound={roomIdNotFound}
-                    setGoogleIdToken={setGoogleIdToken}
-                  />
+                  <PlayerJoin roomIdNotFound={roomIdNotFound} />
                 ) : !isNicknameAcked && !sessionMetadata?.isGameEnd ? (
                   <NicknameScreen sessionMetadata={sessionMetadata} setIsNicknameAcked={setIsNicknameAcked} />
                 ) : (
@@ -239,7 +250,7 @@ async function getToken(googleIdToken: string | undefined): Promise<Token> {
 }
 
 function getRoomIdFromUrl(): string | undefined {
-  if (location.pathname.length > 1) {
-    return location.pathname.split("/").pop();
-  }
+  const urlParams = new URLSearchParams(window.location.search);
+  const roomId = urlParams.get('roomid');
+  return roomId ?? undefined;
 }

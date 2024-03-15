@@ -181,7 +181,7 @@ export class GameScene extends Scene {
       .setScrollFactor(0)
       .setVisible(this.sessionMetadata?.isGameEnd || false);
     this.disconnectText = this.add
-      .text(this.scale.width / 2 - 140, 260, "Match will disconnect shortly", {
+      .text(this.scale.width / 2 - 140, 260, "We are preparing the match statistics", {
         color: "#ecf5f5",
         backgroundColor: "#9A282A",
         padding: { x: 4, y: 2 },

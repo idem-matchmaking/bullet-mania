@@ -4,17 +4,38 @@ import { fileURLToPath } from "url";
 import { UserId, RoomId, Application, startServer, verifyJwt } from "@hathora/server-sdk";
 import dotenv from "dotenv";
 import { Box, Body, System } from "detect-collisions";
-import { Direction, GameState, RoomConfig } from "../common/types";
+import { Direction, GameState, IdemRoomConfig, RoomConfig } from "../common/types";
 import { ClientMessage, ClientMessageType, ServerMessage, ServerMessageType } from "../common/messages";
 import map from "../common/map.json" assert { type: "json" };
 
 import { HathoraCloud } from "@hathora/cloud-sdk-typescript";
+import { IdemHttpClient } from "../common/idem/IdemHttpClient";
+import { MatchRankingRequest } from "../common/idem/contracts/MatchRankingRequest";
+
+// Load our environment variables into process.env
+dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.env") });
+if (process.env.HATHORA_APP_SECRET === undefined) {
+  throw new Error("HATHORA_APP_SECRET not set");
+}
 
 const hathoraSdk = new HathoraCloud({
   serverURL: process.env.HATHORA_SERVER_URL ?? undefined,
   appId: process.env.HATHORA_APP_ID!,
   security: { hathoraDevToken: process.env.DEVELOPER_TOKEN! },
 });
+
+const idemHttpClient = new IdemHttpClient({
+  apiUrl: process.env.IDEM_HTTP_API_URL!,
+  authUrl: process.env.IDEM_AUTH_URL!,
+  authClientId: process.env.IDEM_AUTH_CLIENT_ID!,
+  authUsername: process.env.IDEM_AUTH_USERNAME!,
+  authPassword: process.env.IDEM_AUTH_PASSWORD!,
+});
+
+const gameServer = process.env.IDEM_GAME_SERVER!;
+const gameId = process.env.IDEM_GAME_ID!;
+
+let gameStartTime: number | undefined;
 
 // The millisecond tick rate
 const TICK_INTERVAL_MS = 50;
@@ -135,6 +156,8 @@ type InternalState = {
   capacity: number;
   winningScore: number;
   isGameEnd: boolean;
+  expectedPlayerCount: number;
+  expectedPlayers: string[];
   winningPlayerId?: UserId;
 };
 
@@ -156,10 +179,19 @@ const store: Application = {
     console.log("subscribeUser", roomId, userId);
     try {
       const roomInfo = await hathoraSdk.roomV2.getRoomInfo(roomId);
-      const roomConfig = JSON.parse(roomInfo.room!.roomConfig) as RoomConfig;
+      const idemRoomConfig = JSON.parse(roomInfo.room!.roomConfig) as IdemRoomConfig;
+      
+      const roomConfig: RoomConfig = {
+        capacity: idemRoomConfig.expectedPlayerCount,
+        expectedPlayerCount: idemRoomConfig.expectedPlayerCount,
+        expectedPlayers: idemRoomConfig.expectedPlayers,
+        winningScore: 5,
+        playerNicknameMap: {},
+        isGameEnd: false,
+      };
 
       if (!rooms.has(roomId)) {
-        rooms.set(roomId, initializeRoom(roomConfig.capacity, roomConfig.winningScore, roomConfig.isGameEnd));
+        rooms.set(roomId, initializeRoom(roomConfig.capacity, roomConfig.winningScore, roomConfig.isGameEnd, idemRoomConfig.expectedPlayerCount, idemRoomConfig.expectedPlayers));
       }
       const game = rooms.get(roomId)!;
 
@@ -186,6 +218,12 @@ const store: Application = {
           score: 0,
           sprite: Math.floor(Math.random() * PLAYER_SPRITES_COUNT),
         });
+
+        if (game.players.length === roomConfig.capacity) {
+          await idemHttpClient.confirmMatch(gameId, roomId);
+          gameStartTime = Date.now();
+        }
+
         await updateRoomConfig(game, roomId);
       }
     } catch (err) {
@@ -288,11 +326,6 @@ const store: Application = {
   },
 };
 
-// Load our environment variables into process.env
-dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.env") });
-if (process.env.HATHORA_APP_SECRET === undefined) {
-  throw new Error("HATHORA_APP_SECRET not set");
-}
 
 // Start the server
 const port = parseInt(process.env.PORT ?? "4000");
@@ -415,7 +448,7 @@ function broadcastStateUpdate(roomId: RoomId) {
   server.broadcastMessage(roomId, Buffer.from(JSON.stringify(msg), "utf8"));
 }
 
-function initializeRoom(capacity: number, winningScore: number, isGameEnd: boolean): InternalState {
+function initializeRoom(capacity: number, winningScore: number, isGameEnd: boolean, expectedPlayerCount: number, expectedPlayers: string[]): InternalState {
   const physics = new System();
   const tileSize = map.tileSize;
   const top = map.top * tileSize;
@@ -437,7 +470,7 @@ function initializeRoom(capacity: number, winningScore: number, isGameEnd: boole
   physics.insert(wallBody(left, bottom, right - left, BOUNDARY_WIDTH)); // bottom
   physics.insert(wallBody(right, top, BOUNDARY_WIDTH, bottom - top)); // right
 
-  return { physics, players: [], bullets: [], capacity, winningScore, isGameEnd };
+  return { physics, players: [], bullets: [], capacity, winningScore, isGameEnd, expectedPlayerCount, expectedPlayers };
 }
 
 function wallBody(x: number, y: number, width: number, height: number): PhysicsBody {
@@ -456,28 +489,54 @@ function getDeveloperToken() {
 
 async function endGameCleanup(roomId: string, game: InternalState, winningPlayerId: string) {
   // Update RoomConfig (to persist end game state and prevent new players from joining)
+  
+  const winningPlayer = game.players.find(player => player.id === winningPlayerId);
+  const gameDurationSeconds = gameStartTime ? Math.round(Date.now() - gameStartTime) / 1000 : 0;
+
+  console.log('game duration: ' + gameDurationSeconds);
+
+  const completeMatchRequest: MatchRankingRequest = {
+    gameLength: gameDurationSeconds,
+    server: gameServer,
+    teams: game.players.map(p => ({
+      rank: p.id === winningPlayerId ? 0 : 1,
+      players: [{
+        playerId: p.nickname!,
+        score: p.score
+      }]})
+    )
+  };
+
+  const response = await idemHttpClient.completeMatch(gameId, roomId, completeMatchRequest);
+  const gameResultMessage: ServerMessage = {
+    type: ServerMessageType.GameResult,
+    winningPlayerId: winningPlayer?.nickname!,
+    matchRankingResponse: JSON.stringify(response)
+  };
+  server.broadcastMessage(roomId, Buffer.from(JSON.stringify(gameResultMessage), "utf8"));
+
   game.winningPlayerId = winningPlayerId;
   await updateRoomConfig(game, roomId);
 
   // boot all players and destroy room
-  setTimeout(() => {
-    const playerIds = game.players.map((p) => p.id);
-    playerIds.forEach((playerId) => {
-      console.log("disconnecting: ", playerId, roomId);
-      server.closeConnection(roomId, playerId, "game has ended, disconnecting players");
-    });
-    console.log("destroying room: ", roomId);
-    hathoraSdk.roomV2.destroyRoom(roomId);
-  }, 10000);
+  const playerIds = game.players.map((p) => p.id);
+  playerIds.forEach((playerId) => {
+    console.log("disconnecting: ", playerId, roomId);
+    server.closeConnection(roomId, playerId, "game has ended, disconnecting players");
+  });
+  console.log("destroying room: ", roomId);
+  hathoraSdk.roomV2.destroyRoom(roomId);
 }
 
 async function updateRoomConfig(game: InternalState, roomId: string) {
   const roomConfig: RoomConfig = {
-    capacity: 0,
+    capacity: game.capacity,
     winningScore: game.winningScore,
     playerNicknameMap: Object.fromEntries(game.players.map((player) => [player.id, player.nickname ?? player.id])),
     isGameEnd: game.isGameEnd,
     winningPlayerId: game.winningPlayerId,
+    expectedPlayerCount: game.expectedPlayerCount,
+    expectedPlayers: game.expectedPlayers
   };
   return await hathoraSdk.roomV2.updateRoomConfig({ roomConfig: JSON.stringify(roomConfig) }, roomId);
 }

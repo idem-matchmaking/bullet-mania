@@ -1,4 +1,5 @@
 import { Region } from "@hathora/hathora-cloud-sdk";
+import { MatchRankingResponse } from "./idem/contracts/MatchRankingResponse";
 
 export type Direction = {
   x: number;
@@ -38,6 +39,8 @@ export type RoomConfig = {
   winningScore: number;
   playerNicknameMap: { [playerId: string]: string };
   isGameEnd: boolean;
+  expectedPlayerCount: number;
+  expectedPlayers: string[];
   winningPlayerId?: string;
 };
 
@@ -51,4 +54,10 @@ export type SessionMetadata = {
   winningPlayerId?: string;
   playerNicknameMap: { [playerId: string]: string };
   creatorId: string;
+  matchRankingResponse?: MatchRankingResponse;
+};
+
+export type IdemRoomConfig = {
+  expectedPlayerCount: number;
+  expectedPlayers: string[];
 };

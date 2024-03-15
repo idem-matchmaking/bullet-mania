@@ -13,6 +13,7 @@ export enum ClientMessageType {
 export enum ServerMessageType {
   StateUpdate,
   PingResponse,
+  GameResult
 }
 
 export type ClientMessage =
@@ -56,7 +57,7 @@ export type PingMessage = {
   id: number;
 };
 
-export type ServerMessage = StateUpdateMessage | PingResponseMessage;
+export type ServerMessage = StateUpdateMessage | PingResponseMessage | GameResultMessage;
 
 export type StateUpdateMessage = {
   type: ServerMessageType.StateUpdate;
@@ -67,4 +68,10 @@ export type StateUpdateMessage = {
 export type PingResponseMessage = {
   type: ServerMessageType.PingResponse;
   id: number;
+};
+
+export type GameResultMessage = {
+  type: ServerMessageType.GameResult;
+  winningPlayerId: string;
+  matchRankingResponse: string;
 };

@@ -2,7 +2,7 @@ import React from "react";
 
 export function GithubCorner() {
   return (
-    <a href="https://github.com/hathora/bullet-mania" className="github-corner" aria-label="View source on GitHub">
+    <a href="https://github.com/idem-matchmaking/bullet-mania" className="github-corner" aria-label="View source on GitHub">
       <svg
         width="80"
         height="80"

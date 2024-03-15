@@ -25,7 +25,7 @@ export function GameComponent(props: GameComponentProps) {
   const [sceneRendered, setSceneRendered] = React.useState<boolean>(false);
   if (
     !sceneRendered &&
-    ((connection != null && sessionMetadata != null && isNicknameAcked) || sessionMetadata?.isGameEnd)
+    ((connection != null && sessionMetadata != null && isNicknameAcked && token != null) || sessionMetadata?.isGameEnd)
   ) {
     setSceneRendered(true);
     const game = new Game(GameConfig);

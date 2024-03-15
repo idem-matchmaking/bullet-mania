@@ -15,12 +15,13 @@ export function BulletButton(props: BulletButtonProps) {
       }`}
     >
       <div
+        style={{left: large ? '35px' : '22px'}}
         className={`absolute text-secondary-400 ${disabled ? "" : "group-hover:text-secondary-300"}  ${
           xlarge
             ? "max-w-[100px] text-center leading-4 left-[36px] top-[6px]"
             : large
-            ? "left-[29px] top-[4px]"
-            : "left-[22px]"
+            ? "top-[4px]"
+            : ""
         }`}
       >
         {text}

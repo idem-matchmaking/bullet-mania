@@ -1,7 +1,8 @@
 {
   "type": "module",
   "dependencies": {
-    "@hathora/hathora-cloud-sdk": "^0.0.3"
+    "@hathora/hathora-cloud-sdk": "^0.0.3",
+    "axios": "^1.6.7"
   },
   "devDependencies": {
     "typescript": "^4.8.3"

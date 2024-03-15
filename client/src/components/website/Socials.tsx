@@ -8,19 +8,6 @@ export function Socials({ roomId }: SocialProps) {
 
   return (
     <div className="flex items-left w-full h-full my-4 px-4 md:px-0">
-      <SocialIcon href="https://discord.gg/hathora" imgSrc="social-media/icon-discord.svg" imgAlt="Discord" />
-      <SocialIcon href="https://github.com/hathora" imgSrc="social-media/icon-github.svg" imgAlt="Github" />
-      <SocialIcon href="https://twitter.com/HathoraDev" imgSrc="social-media/icon-twitter.svg" imgAlt="Twitter" />
-      <SocialIcon
-        href="https://www.youtube.com/channel/UCwJhOa1fXbkitI0u94PJOHg"
-        imgSrc="social-media/icon-youtube.svg"
-        imgAlt="YouTube"
-      />
-      <SocialIcon
-        href="https://www.linkedin.com/company/hathora/"
-        imgSrc="social-media/icon-linkedin.svg"
-        imgAlt="LinkedIn"
-      />
       {roomId && (
         <div className={"ml-auto flex items-center gap-2"}>
           {showCopied && <div className={"text-neutralgray-400"}>Copied!</div>}
