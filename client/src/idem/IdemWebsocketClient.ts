@@ -61,9 +61,13 @@ export class IdemWebsocketClient {
             if (event.data) {
                 const data = JSON.parse(event.data);
                 if (data.action === 'joinInfo') {
+                    // This message contains information on how to join the Hathora room for the match
                     this.playerJoinedEvent({
                         roomId: data.payload.roomId
                     });
+                }
+                if (data.action === 'keepAlive') {
+                    // This is a keep alive message we can simply ignore.
                 }
             }
         }
