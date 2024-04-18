@@ -3,25 +3,15 @@
 
 ## Overview 
 
-Multiplayer 2D shooter demo made using:
-  - [Phaser](https://phaser.io/) - Game framework
-  - [Hathora Cloud SDK](https://github.com/hathora/hathora-cloud-sdks) - Server hosting
-  - [Hathora Buildkits](https://github.com/hathora/buildkits) - Network transport
-  - [React](https://react.dev/) - Lobby UI
+Hathora built Bullet Mania to showcase how simple it can be to build scalable multiplayer games with Hathora Cloud.
 
-Assets from [Kenney](https://kenney.nl/assets/top-down-shooter)
+Adding Idem’s matchmaking to Bullet Mania shows how a full-fledged multiplayer game can be created, without the need of any server infrastructure.
 
-Additional implementations of the game client are also available for the following engines:
-  - [Unity](https://github.com/hathora/topdown-shooter-unity-client)
-  - [Bevy](https://github.com/hathora/topdown-shooter-bevy-client)
+In this solution, the players directly connect to Idem’s matchmaker. When a match is found, Idem spins up a game server on Hathora’s cloud, where the game is played. After the game is concluded, the results are returned to Idem in order to update the rating and ranking.
 
-## Try it
+## Try the Hathora x Idem integration
 
-The game is playable at https://bullet-mania.vercel.app
-
-Lobby            |  Gameplay
-:-------------------------:|:-------------------------:
-![A screenshot of the completed top-down shooter lobby.](/client/src/assets/screenshots/lobby_screenshot.png) |  ![A screenshot of the completed top-down shooter game in action.](/client/src/assets/screenshots/gameplay_screenshot_cropped.png)
+The game is playable at https://bulletmania.idem.gg
 
 Instructions:
 
@@ -29,43 +19,9 @@ Instructions:
   - **Mouse** to aim and shoot
   - **Spacebar** to dash
   - **R** to reload
-  - Once you are in a game, share the URL to allow others to join
 
-## Architecture
+## Run and deploy
 
-Fully server authoritative game:
-- Client sends user inputs to server
-- Server processes the inputs and runs game simulation (at 20fps)
-- Server broadcasts state snapshots to clients (at 20fps)
-- Client interpolates the state snapshots and renders the game UI (at 60fps)
-- No prediction on the client side
+Keep reading in Idem's documentation for in-depth explanation of this implementation and to learn how to add scalability and matchmaking to your own multiplayer game. 
 
-Room based architecture:
-- One player creates a game session and gets back a `roomId`
-- They send the `roomId` to others
-- Others can join the same session with this `roomId`
-
-## Running locally 
-
-To run locally:
-- Have node installed
-- Get a Hathora `appId` and `appSecret` via https://console.hathora.dev/
-- Get a Hathora developer token (see https://hathora.dev/docs/guides/generate-developer-token)
-- Create a .env file at the root with
-```
-HATHORA_APP_ID=<appId>
-HATHORA_APP_SECRET=<appSecret>
-DEVELOPER_TOKEN=<appToken>
-```
-- Start server: inside `server` directory run `npm start` (remember to `npm install` first)
-- Start client: inside `client` directory run `npm start` (remember to `npm install` first)
-
-## Deploying
-
-Server:
-- Run `hathora-cloud deploy --appId <appId> --roomsPerProcess 1 --planName tiny --transportType tls --containerPort 4000 --env '[{"name": "DEVELOPER_TOKEN", "value": "<developerToken>"}]'`
-
-Client:
-- cd to `common` and run `npm install && npx tsc`
-- Then cd to `client` and `npm run build`
-- Now you can deploy `dist` to any CDN like Vercel or Netlify
+Documentation: https://docs.idem.gg/b_getting_started/hosting_integration/
